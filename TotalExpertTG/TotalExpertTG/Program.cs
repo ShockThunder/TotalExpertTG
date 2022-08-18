@@ -1,12 +1,11 @@
-﻿
+﻿using HtmlAgilityPack;
+
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
 
-using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace TotalExpertTG;
 
@@ -15,10 +14,10 @@ public class Program
     public static TelegramBotClient bot = new(TOKEN);
     public const string TOKEN = "5567107382:AAH1lCd-VCFMaGKbW_HqYdyiFQnIVNZH_Nk";
     public const string MEME_CALLBACK = "memeCallback";
+    private static Random random = new Random();
 
     public static async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
     {
-        Console.WriteLine(JsonSerializer.Serialize(update));
         if(update.Type == UpdateType.Message)
         {
             var message = update.Message;
@@ -48,9 +47,21 @@ public class Program
             {
                 try
                 {
-                    var uri = new Uri("https://pbs.twimg.com/media/Ei8m_X0WkAAnRYg.jpg");
-                   
-                    await botClient.SendPhotoAsync(callback.Message.Chat, new InputOnlineFile(uri));
+                    var textAdder = new TextAdder();
+                    var text = await GetPanoramaNews();
+                    var result = textAdder.GenerateMeme(text);
+                    result.Position = 0;
+                    await botClient.SendPhotoAsync(callback.Message.Chat, result);
+                    var button = InlineKeyboardButton.WithCallbackData("Дай мем, эксперт.", MEME_CALLBACK);
+                    var reply = new InlineKeyboardMarkup(
+                        new[]
+                        {
+                            new[]
+                            {
+                                button
+                            }
+                        });
+                    await botClient.SendTextMessageAsync(callback.Message.Chat, "Чего тебе, неуч?", replyMarkup: reply);
                 }
                 catch (Exception e)
                 {
@@ -60,31 +71,43 @@ public class Program
         }
     }
 
+    public static async Task<string> GetPanoramaNews()
+    {
+        var html = @"https://panorama.pub/politics";
+
+        var web = new HtmlWeb();
+
+        var htmlDoc = web.Load(html);
+        var nodes = htmlDoc.DocumentNode.SelectNodes("//div[contains(@class, 'pt-2 text-xl lg:text-lg xl:text-base text-center font-semibold')]");
+
+        var node = nodes[random.Next(0, nodes.Count)];
+        return node.InnerText.Trim();
+    }
+
     public static async Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken cancellationToken)
     {
         // Некоторые действия
-        Console.WriteLine(JsonSerializer.Serialize(exception));
+        Console.WriteLine($"{exception.Message} {exception.InnerException?.Message}");
     }
     
     static void Main(string[] args)
     {
         Console.WriteLine("Запущен бот " + bot.GetMeAsync().Result.FirstName);
 
-        // var cts = new CancellationTokenSource();
-        // var cancellationToken = cts.Token;
-        // var receiverOptions = new ReceiverOptions
-        // {
-        //     AllowedUpdates = { }, // receive all update types
-        // };
-        // bot.StartReceiving(
-        //     HandleUpdateAsync,
-        //     HandleErrorAsync,
-        //     receiverOptions,
-        //     cancellationToken
-        // );
+        var cts = new CancellationTokenSource();
+        var cancellationToken = cts.Token;
+        var receiverOptions = new ReceiverOptions
+        {
+            AllowedUpdates = { }, // receive all update types
+        };
+        bot.StartReceiving(
+            HandleUpdateAsync,
+            HandleErrorAsync,
+            receiverOptions,
+            cancellationToken
+        );
 
-        var textAdder = new TextAdder();
-        var result = textAdder.GenerateMeme("text");
+
         
         Console.ReadLine();
     }
